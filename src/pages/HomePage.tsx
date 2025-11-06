@@ -1,4 +1,6 @@
 import { Sprout, Camera, TrendingUp, Heart } from 'lucide-react';
+import Button from '../components/Button';
+import Card from '../components/Card';
 
 interface HomePageProps {
   onAnalyzeClick: () => void;
@@ -18,17 +20,19 @@ export default function HomePage({ onAnalyzeClick }: HomePageProps) {
           Análise instantânea do seu solo com Inteligência Artificial. Tire uma foto e receba
           recomendações personalizadas para sua plantação.
         </p>
-        <button
+        <Button
           onClick={onAnalyzeClick}
-          className="bg-green-700 hover:bg-green-800 text-white px-8 sm:px-12 py-4 sm:py-5 rounded-xl font-semibold text-base sm:text-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center space-x-3 mx-auto"
+          variant="primary"
+          size="lg"
+          icon={<Camera size={24} />}
+          className="mx-auto"
         >
-          <Camera size={24} />
-          <span>Tire uma Foto e Analise Seu Solo!</span>
-        </button>
+          Tire uma Foto e Analise Seu Solo!
+        </Button>
       </section>
 
       <section className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 mb-16 sm:mb-20">
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-stone-200">
+        <Card padding="lg">
           <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
             <Camera className="text-green-700" size={24} />
           </div>
@@ -36,9 +40,9 @@ export default function HomePage({ onAnalyzeClick }: HomePageProps) {
           <p className="text-stone-600 leading-relaxed">
             Tire uma foto do seu solo e receba a análise em segundos. Não precisa de equipamentos caros.
           </p>
-        </div>
+        </Card>
 
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-stone-200">
+        <Card padding="lg">
           <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
             <TrendingUp className="text-green-700" size={24} />
           </div>
@@ -46,9 +50,9 @@ export default function HomePage({ onAnalyzeClick }: HomePageProps) {
           <p className="text-stone-600 leading-relaxed">
             Receba dicas específicas sobre o que plantar e como melhorar sua colheita.
           </p>
-        </div>
+        </Card>
 
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-stone-200 sm:col-span-2 md:col-span-1">
+        <Card padding="lg" className="sm:col-span-2 md:col-span-1">
           <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
             <Heart className="text-green-700" size={24} />
           </div>
@@ -56,7 +60,7 @@ export default function HomePage({ onAnalyzeClick }: HomePageProps) {
           <p className="text-stone-600 leading-relaxed">
             Criado pensando na agricultura familiar, com linguagem simples e amigável.
           </p>
-        </div>
+        </Card>
       </section>
 
       <section className="bg-gradient-to-br from-green-50 to-stone-50 rounded-3xl p-8 sm:p-12 border border-green-100">
@@ -64,30 +68,31 @@ export default function HomePage({ onAnalyzeClick }: HomePageProps) {
           O Que Nossos Agricultores Dizem
         </h2>
         <div className="grid sm:grid-cols-2 gap-6 sm:gap-8">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+          <Card padding="md">
             <p className="text-stone-700 mb-4 italic leading-relaxed">
               "Nunca pensei que seria tão fácil. Tirei a foto e em minutos já sabia o que
               plantar na minha terra. A colheita melhorou muito!"
             </p>
             <p className="font-semibold text-green-800">— João Silva, Minas Gerais</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+          </Card>
+          <Card padding="md">
             <p className="text-stone-700 mb-4 italic leading-relaxed">
               "Agora eu entendo minha terra. As dicas são claras e funcionam mesmo.
               Recomendo para todos os agricultores!"
             </p>
             <p className="font-semibold text-green-800">— Maria Santos, São Paulo</p>
-          </div>
+          </Card>
         </div>
       </section>
 
       <section className="text-center mt-16 sm:mt-20">
-        <button
+        <Button
           onClick={onAnalyzeClick}
-          className="bg-stone-800 hover:bg-stone-900 text-white px-8 sm:px-10 py-4 rounded-xl font-semibold text-base sm:text-lg transition-all shadow-md hover:shadow-lg"
+          variant="secondary"
+          size="lg"
         >
           Começar Agora
-        </button>
+        </Button>
       </section>
     </div>
   );

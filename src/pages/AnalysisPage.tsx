@@ -1,10 +1,15 @@
 import { useState, useRef } from 'react';
-import { Camera, Upload, Loader2, MapPin, CheckCircle, Sprout } from 'lucide-react';
+import { Camera, Upload, MapPin, CheckCircle, Sprout } from 'lucide-react';
 import { analyzeImageWithGemini, AnalysisResult } from '../lib/aiAnalysis';
 import { supabase } from '../lib/supabase';
+import { useImageCapture } from '../hooks/useImageCapture';
+import Button from '../components/Button';
+import Card from '../components/Card';
+import Input from '../components/Input';
+import Badge from '../components/Badge';
 
 export default function AnalysisPage() {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const { image: selectedImage, captureImage, clearImage } = useImageCapture();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [location, setLocation] = useState<string>('');
@@ -13,12 +18,8 @@ export default function AnalysisPage() {
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
-        setAnalysisResult(null);
-      };
-      reader.readAsDataURL(file);
+      captureImage(file);
+      setAnalysisResult(null);
     }
   };
 
@@ -51,7 +52,7 @@ export default function AnalysisPage() {
   };
 
   const handleReset = () => {
-    setSelectedImage(null);
+    clearImage();
     setAnalysisResult(null);
     setLocation('');
     if (fileInputRef.current) {
@@ -71,7 +72,7 @@ export default function AnalysisPage() {
       </div>
 
       {!selectedImage && (
-        <div className="bg-white rounded-2xl shadow-lg border border-stone-200 p-6 sm:p-10 mb-8">
+        <Card variant="elevated" padding="lg" className="mb-8">
           <h2 className="text-xl sm:text-2xl font-bold text-stone-900 mb-6">
             Como Tirar a Foto do Solo
           </h2>
@@ -143,11 +144,11 @@ export default function AnalysisPage() {
               <span>Escolher da Galeria</span>
             </label>
           </div>
-        </div>
+        </Card>
       )}
 
       {selectedImage && !analysisResult && (
-        <div className="bg-white rounded-2xl shadow-lg border border-stone-200 p-6 sm:p-10 mb-8">
+        <Card variant="elevated" padding="lg" className="mb-8">
           <h2 className="text-xl sm:text-2xl font-bold text-stone-900 mb-6">
             Foto Selecionada
           </h2>
@@ -158,47 +159,35 @@ export default function AnalysisPage() {
           />
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-stone-700 mb-2">
-              Localização (opcional)
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-3.5 text-stone-400" size={20} />
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Ex: Sítio São João, Minas Gerais"
-                className="w-full pl-11 pr-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
+            <Input
+              label="Localização (opcional)"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Ex: Sítio São João, Minas Gerais"
+              icon={<MapPin size={20} />}
+            />
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <button
+            <Button
               onClick={handleAnalyze}
-              disabled={isAnalyzing}
-              className="flex-1 flex items-center justify-center space-x-2 bg-green-700 hover:bg-green-800 disabled:bg-green-400 text-white px-6 py-4 rounded-xl font-semibold transition-all shadow-md hover:shadow-lg"
+              isLoading={isAnalyzing}
+              icon={<Sprout size={24} />}
+              variant="primary"
+              size="lg"
+              className="flex-1"
             >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="animate-spin" size={24} />
-                  <span>Analisando com IA...</span>
-                </>
-              ) : (
-                <>
-                  <Sprout size={24} />
-                  <span>Analisar Solo</span>
-                </>
-              )}
-            </button>
-            <button
+              {isAnalyzing ? 'Analisando com IA...' : 'Analisar Solo'}
+            </Button>
+            <Button
               onClick={handleReset}
-              className="sm:w-auto px-6 py-4 border-2 border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all"
+              variant="outline"
+              size="lg"
             >
               Trocar Foto
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {analysisResult && (
@@ -211,10 +200,12 @@ export default function AnalysisPage() {
               </h2>
             </div>
 
-            <div className="bg-white rounded-xl p-6 mb-6 border border-green-100">
+            <Card padding="md" className="mb-6 border border-green-100">
               <h3 className="text-lg font-bold text-stone-900 mb-2">Tipo de Solo</h3>
-              <p className="text-2xl font-bold text-green-800">{analysisResult.soilType}</p>
-            </div>
+              <Badge variant="primary" size="lg">
+                {analysisResult.soilType}
+              </Badge>
+            </Card>
 
             <div className="bg-white rounded-xl p-6 mb-6 border border-stone-200">
               <h3 className="text-lg font-bold text-stone-900 mb-4">Características Identificadas</h3>
@@ -250,12 +241,14 @@ export default function AnalysisPage() {
             )}
           </div>
 
-          <button
+          <Button
             onClick={handleReset}
-            className="w-full bg-stone-800 hover:bg-stone-900 text-white px-6 py-4 rounded-xl font-semibold transition-all shadow-md hover:shadow-lg"
+            variant="secondary"
+            size="lg"
+            className="w-full"
           >
             Fazer Nova Análise
-          </button>
+          </Button>
         </div>
       )}
     </div>

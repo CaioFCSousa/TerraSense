@@ -1,33 +1,27 @@
-import { useState, useEffect } from 'react';
-import { FileText, MapPin, Calendar, Sprout, Loader2, MessageCircle } from 'lucide-react';
-import { supabase, Analysis } from '../lib/supabase';
+import { useState } from 'react';
+import { FileText, MapPin, Calendar, Sprout, MessageCircle } from 'lucide-react';
+import { Analysis } from '../lib/supabase';
+import { useAnalysisHistory } from '../hooks/useAnalysisHistory';
+import { useDebounce } from '../hooks/useDebounce';
 import ChatInterface from '../components/ChatInterface';
+import Card from '../components/Card';
+import LoadingSpinner from '../components/LoadingSpinner';
+import EmptyState from '../components/EmptyState';
+import Modal from '../components/Modal';
+import Button from '../components/Button';
+import SearchBar from '../components/SearchBar';
 
 export default function MyAnalysesPage() {
-  const [analyses, setAnalyses] = useState<Analysis[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { analyses: allAnalyses, isLoading } = useAnalysisHistory();
   const [selectedAnalysis, setSelectedAnalysis] = useState<Analysis | null>(null);
   const [chatAnalysis, setChatAnalysis] = useState<Analysis | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  useEffect(() => {
-    loadAnalyses();
-  }, []);
-
-  const loadAnalyses = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('analyses')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setAnalyses(data || []);
-    } catch (error) {
-      console.error('Error loading analyses:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const analyses = allAnalyses.filter(analysis =>
+    analysis.soil_type.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    (analysis.location && analysis.location.toLowerCase().includes(debouncedSearch.toLowerCase()))
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -43,10 +37,7 @@ export default function MyAnalysesPage() {
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="animate-spin text-green-700 mb-4" size={48} />
-          <p className="text-stone-600 text-lg">Carregando suas análises...</p>
-        </div>
+        <LoadingSpinner size="xl" text="Carregando suas análises..." />
       </div>
     );
   }
@@ -57,28 +48,37 @@ export default function MyAnalysesPage() {
         <h1 className="text-3xl sm:text-4xl font-bold text-green-900 mb-3 sm:mb-4">
           Minhas Análises
         </h1>
-        <p className="text-base sm:text-lg text-stone-600 max-w-2xl mx-auto">
+        <p className="text-base sm:text-lg text-stone-600 max-w-2xl mx-auto mb-6">
           Veja todas as análises que você já fez
         </p>
+        {allAnalyses.length > 0 && (
+          <div className="max-w-md mx-auto">
+            <SearchBar
+              placeholder="Buscar por tipo de solo ou localização..."
+              onSearch={setSearchQuery}
+            />
+          </div>
+        )}
       </div>
 
       {analyses.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-lg border border-stone-200 p-10 text-center">
-          <FileText className="mx-auto text-stone-400 mb-4" size={64} />
-          <h2 className="text-2xl font-bold text-stone-900 mb-3">
-            Nenhuma Análise Ainda
-          </h2>
-          <p className="text-stone-600 mb-6">
-            Você ainda não fez nenhuma análise de solo. Comece agora!
-          </p>
-        </div>
+        <Card variant="elevated" padding="lg">
+          <EmptyState
+            icon={<FileText size={64} />}
+            title={allAnalyses.length === 0 ? "Nenhuma Análise Ainda" : "Nenhum resultado encontrado"}
+            description={allAnalyses.length === 0
+              ? "Você ainda não fez nenhuma análise de solo. Comece agora!"
+              : "Tente buscar por outro termo"}
+          />
+        </Card>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {analyses.map((analysis) => (
-            <div
+            <Card
               key={analysis.id}
               onClick={() => setSelectedAnalysis(analysis)}
-              className="bg-white rounded-xl shadow-md border border-stone-200 overflow-hidden cursor-pointer hover:shadow-xl transition-all transform hover:-translate-y-1"
+              padding="none"
+              hoverable
             >
               <img
                 src={analysis.image_url}
@@ -102,31 +102,19 @@ export default function MyAnalysesPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
       {selectedAnalysis && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={() => setSelectedAnalysis(null)}
+        <Modal
+          isOpen={!!selectedAnalysis}
+          onClose={() => setSelectedAnalysis(null)}
+          title="Detalhes da Análise"
+          size="lg"
         >
-          <div
-            className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-stone-200 p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-green-900">Detalhes da Análise</h2>
-              <button
-                onClick={() => setSelectedAnalysis(null)}
-                className="text-stone-500 hover:text-stone-700 text-2xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6">
               <img
                 src={selectedAnalysis.image_url}
                 alt="Solo analisado"
@@ -175,19 +163,20 @@ export default function MyAnalysesPage() {
                 )}
               </div>
 
-              <button
+              <Button
                 onClick={() => {
                   setChatAnalysis(selectedAnalysis);
                   setSelectedAnalysis(null);
                 }}
-                className="w-full mt-4 bg-green-700 text-white py-3 px-6 rounded-xl hover:bg-green-800 transition-colors flex items-center justify-center space-x-2 font-semibold"
+                variant="primary"
+                size="lg"
+                icon={<MessageCircle size={20} />}
+                className="w-full mt-4"
               >
-                <MessageCircle size={20} />
-                <span>Tirar Dúvidas sobre este Solo</span>
-              </button>
+                Tirar Dúvidas sobre este Solo
+              </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {chatAnalysis && (
