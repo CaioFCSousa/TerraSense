@@ -12,6 +12,8 @@ interface ChatMessage {
 const API_KEY = "AIzaSyCMF7NE7gsxx1E0OiGXJXbtkAp89LxOnIA";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
 
+console.log(API_KEY);
+
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
   try {
     const base64Data = imageBase64.includes(',')
