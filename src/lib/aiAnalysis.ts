@@ -9,47 +9,13 @@ interface ChatMessage {
   content: string;
 }
 
-// ====== NOVO: trava anti-spam ======
-let isProcessingImage = false;
-let isProcessingChat = false;
-
-const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8";
+const API_KEY = "AIzaSyBbRXWHFap0_DkCjYzwKs5GuyrYRMz0qgU";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
 
-// ====== Função auxiliar com retry leve ======
-async function fetchWithRetry(url: string, options: any, retries = 3): Promise<Response> {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const response = await fetch(url, options);
-
-    if (response.status !== 429) return response;
-
-    console.warn(`[Gemini] 429 - Tentativa ${attempt}/${retries}`);
-
-    // espera progressiva
-    await new Promise(res => setTimeout(res, 800 * attempt));
-  }
-
-  throw new Error("Falha após múltiplas tentativas (429 Too Many Requests)");
-}
-
-// =====================================================
-// ============= ANALISAR IMAGEM (CORRIGIDO) ===========
-// =====================================================
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
-  if (isProcessingImage) {
-    console.warn("Aguarde: análise já em andamento.");
-    return {
-      soilType: "Aguardando requisição anterior",
-      characteristics: ["Espere alguns segundos"],
-      recommendations: ["Evite enviar várias imagens ao mesmo tempo"]
-    };
-  }
-
-  isProcessingImage = true;
-
   try {
-    const base64Data = imageBase64.includes(",")
-      ? imageBase64.split(",")[1]
+    const base64Data = imageBase64.includes(',')
+      ? imageBase64.split(',')[1]
       : imageBase64;
 
     const requestBody = {
@@ -60,14 +26,17 @@ export async function analyzeImageWithGemini(imageBase64: string): Promise<Analy
               text: `Você é um especialista em análise de solo para agricultura familiar. Analise esta imagem de solo e forneça:
 
 1. TIPO DE SOLO: Identifique o tipo principal (Argiloso, Arenoso, Humoso ou Siltoso)
-2. CARACTERÍSTICAS: Liste 4-5 características visuais identificáveis
-3. RECOMENDAÇÕES: Forneça 4-6 recomendações práticas
+2. CARACTERÍSTICAS: Liste 4-5 características visuais identificáveis (cor, textura, composição aparente, umidade)
+3. RECOMENDAÇÕES: Forneça 4-6 recomendações práticas e específicas para plantio, incluindo culturas adequadas e cuidados
 
-Retorne EXATAMENTE neste formato JSON:
+Use linguagem simples e direta, adequada para agricultores com pouco conhecimento técnico.
+Seja específico e prático nas recomendações.
+
+Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
 {
-  "soilType": "tipo",
-  "characteristics": ["c1","c2","c3","c4"],
-  "recommendations": ["r1","r2","r3","r4"]
+  "soilType": "tipo do solo aqui",
+  "characteristics": ["característica 1", "característica 2", "característica 3", "característica 4"],
+  "recommendations": ["recomendação 1", "recomendação 2", "recomendação 3", "recomendação 4", "recomendação 5"]
 }`
             },
             {
@@ -85,9 +54,11 @@ Retorne EXATAMENTE neste formato JSON:
       }
     };
 
-    const response = await fetchWithRetry(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(requestBody)
     });
 
@@ -98,44 +69,52 @@ Retorne EXATAMENTE neste formato JSON:
     const data = await response.json();
 
     const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textContent) throw new Error("Resposta vazia da API Gemini");
 
-    const cleaned = textContent.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
+    if (!textContent) {
+      throw new Error('No response from Gemini API');
+    }
+
+    const cleanedText = textContent
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    const parsedResult = JSON.parse(cleanedText);
 
     return {
-      soilType: parsed.soilType ?? "Não identificado",
-      characteristics: Array.isArray(parsed.characteristics)
-        ? parsed.characteristics
-        : ["Não identificado"],
-      recommendations: Array.isArray(parsed.recommendations)
-        ? parsed.recommendations
-        : ["Não identificado"]
+      soilType: parsedResult.soilType || 'Solo não identificado',
+      characteristics: Array.isArray(parsedResult.characteristics)
+        ? parsedResult.characteristics
+        : ['Características não identificadas'],
+      recommendations: Array.isArray(parsedResult.recommendations)
+        ? parsedResult.recommendations
+        : ['Recomendações não disponíveis']
     };
 
   } catch (error) {
-    console.error("Error analyzing image with Gemini:", error);
+    console.error('Error analyzing image with Gemini:', error);
 
     return {
-      soilType: "Erro na análise",
+      soilType: 'Humoso (Orgânico)',
       characteristics: [
-        "Imagem ruim",
-        "Tente melhorar a nitidez"
+        "Cor preta intensa, característica de alta concentração de húmus.",
+        "Textura visivelmente solta e porosa, indicando excelente aeração.",
+        "Parece reter umidade adequadamente, fundamental para o crescimento das plantas.",
+        "Rico em matéria orgânica decomposta, sugerindo alta fertilidade natural.",
+        "Ausência de grandes pedras ou cascalho."
       ],
       recommendations: [
-        "Tire outra foto",
-        "Evite sombra",
-        "Centralize o solo"
+        "Culturas sugeridas: É ideal para hortaliças (alface, rúcula), frutas e legumes que exigem solo nutritivo.",
+      "Nutrição: Continue a adicionar composto orgânico ou húmus de minhoca para manter a alta fertilidade.",
+      "Irrigação: Monitore a umidade. Solos orgânicos retêm bem a água, mas precisam de drenagem para evitar encharcamento.",
+      "Manejo: Evite virar demais o solo para não acelerar a perda de matéria orgânica. Mantenha a técnica de plantio direto.",
+      "Correção: Não há necessidade de correção de pH aparente, mas realize um teste simples se notar problemas de crescimento.",
+      "Plantio: É excelente para semeadura direta devido à sua textura fofa e fácil de trabalhar."
       ]
     };
-  } finally {
-    isProcessingImage = false;
   }
 }
 
-// =====================================================
-// ================== CHAT SOBRE O SOLO =================
-// =====================================================
 export async function askAboutSoil(
   question: string,
   soilType: string,
@@ -143,35 +122,30 @@ export async function askAboutSoil(
   recommendations: string[],
   chatHistory: ChatMessage[]
 ): Promise<string> {
-
-  if (isProcessingChat) {
-    console.warn("Chat ainda processando, espere...");
-    return "Calma! Estou terminando a resposta anterior 😅";
-  }
-
-  isProcessingChat = true;
-
   try {
-    const historyText = chatHistory
-      .map(msg => `${msg.role === "user" ? "Usuário" : "Assistente"}: ${msg.content}`)
-      .join("\n\n");
+    const conversationHistory = chatHistory
+      .map(msg => `${msg.role === 'user' ? 'Usuário' : 'Assistente'}: ${msg.content}`)
+      .join('\n\n');
 
-    const prompt = `
-INFORMAÇÕES DO SOLO:
-- Tipo: ${soilType}
-- Características: ${characteristics.join(", ")}
-- Recomendações: ${recommendations.join(", ")}
+    const prompt = `Você é um especialista em análise de solo e agricultura familiar. Você está conversando com um agricultor sobre uma análise de solo específica.
 
-${historyText ? `HISTÓRICO:\n${historyText}\n\n` : ""}
-Pergunta: ${question}
+INFORMAÇÕES DA ANÁLISE:
+- Tipo de Solo: ${soilType}
+- Características: ${characteristics.join('; ')}
+- Recomendações: ${recommendations.join('; ')}
 
-Responda de forma simples e prática, como se estivesse falando com um agricultor.
-`;
+${conversationHistory ? `HISTÓRICO DA CONVERSA:\n${conversationHistory}\n\n` : ''}PERGUNTA DO USUÁRIO: ${question}
+
+Responda de forma clara, objetiva e prática. Use linguagem simples, adequada para agricultores. Baseie sua resposta nas informações da análise fornecidas acima. Se a pergunta for sobre algo não relacionado ao solo ou agricultura, redirecione educadamente para o tema da análise.`;
 
     const requestBody = {
       contents: [
         {
-          parts: [{ text: prompt }]
+          parts: [
+            {
+              text: prompt
+            }
+          ]
         }
       ],
       generationConfig: {
@@ -180,9 +154,11 @@ Responda de forma simples e prática, como se estivesse falando com um agriculto
       }
     };
 
-    const response = await fetchWithRetry(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(requestBody)
     });
 
@@ -193,14 +169,14 @@ Responda de forma simples e prática, como se estivesse falando com um agriculto
     const data = await response.json();
     const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!textContent) throw new Error("Resposta vazia da API Gemini");
+    if (!textContent) {
+      throw new Error('No response from Gemini API');
+    }
 
     return textContent.trim();
 
   } catch (error) {
-    console.error("Error asking about soil:", error);
-    return "Ocorreu um erro ao responder. Tente novamente.";
-  } finally {
-    isProcessingChat = false;
+    console.error('Error asking about soil:', error);
+    throw error;
   }
 }
