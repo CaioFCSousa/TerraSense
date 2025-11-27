@@ -61,7 +61,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 
     // 3. Chamada de API usando o SDK com resposta estruturada
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash',
       contents: [
         {
           parts: [
