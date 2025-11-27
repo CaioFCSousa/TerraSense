@@ -1,15 +1,14 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-// ⚠️ Mudei a forma como a chave é obtida.
-// É altamente recomendado carregar a chave de uma variável de ambiente (process.env.GEMINI_API_KEY)
-// e NUNCA deixá-la hardcoded ou exposta no frontend.
-// Para este exemplo, vou manter a chave, mas você deve removê-la em produção.
+// ⚠️ AVISO DE SEGURANÇA:
+// Para produção, esta chave deve ser carregada de forma segura (ex: process.env.GEMINI_API_KEY)
+// e NUNCA deve ser exposta no código de frontend (navegador).
 const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8"; 
 
-// 1. Inicialize o SDK. Ele usa a variável de ambiente GEMINI_API_KEY ou a chave passada.
+// 1. Inicializa o SDK do Google GenAI
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// Interfaces existentes
+// --- Interfaces ---
 export interface AnalysisResult {
   soilType: string;
   characteristics: string[];
@@ -43,6 +42,9 @@ const analysisSchema = {
   required: ["soilType", "characteristics", "recommendations"]
 };
 
+// =========================================================================
+// ## Função 1: analyzeImageWithGemini (Análise de Imagem)
+// =========================================================================
 
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
   try {
@@ -59,9 +61,9 @@ export async function analyzeImageWithGemini(imageBase64: string): Promise<Analy
 Use linguagem simples e direta, adequada para agricultores com pouco conhecimento técnico.
 Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 
-    // 3. Chamada de API usando o SDK com resposta estruturada
+    // Chamada de API usando o SDK com resposta estruturada
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // Modelo atualizado e estável
+      model: 'gemini-2.5-flash', // Modelo Estável
       contents: [
         {
           parts: [
@@ -78,17 +80,45 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
       config: {
         temperature: 0.7,
         maxOutputTokens: 1024,
-        // Configurações chave para garantir o JSON
         responseMimeType: "application/json",
         responseSchema: analysisSchema
       }
     });
 
-    // 4. A resposta estruturada está diretamente no 'response.text' como uma string JSON limpa
-    const jsonText = response.text;
-    
-    // O SDK garante o JSON, então não precisamos mais do 'cleanedText' e regex!
-    const parsedResult = JSON.parse(jsonText);
+    let jsonText = response.text; // Captura a string de resposta
+    let parsedResult: AnalysisResult;
+
+    // 🛑 VERIFICAÇÃO CRÍTICA: Trata o erro de "undefined" ou resposta vazia
+    if (!jsonText || jsonText.trim() === "undefined" || jsonText.trim().length === 0) {
+      throw new Error('Gemini returned empty or invalid response text (likely "undefined").');
+    }
+    
+    jsonText = jsonText.trim();
+
+    try {
+      // Tenta analisar a resposta diretamente
+      parsedResult = JSON.parse(jsonText);
+
+    } catch (parseError) {
+      // 5. Lógica de Saneamento de JSON: Tenta corrigir aspas/quebras de linha
+      console.warn('JSON parsing failed. Attempting to sanitize response:', jsonText);
+      
+      // Saneamento: remove quebras de linha e tenta escapar aspas duplas internas não escapadas
+      const sanitizedText = jsonText
+        .replace(/\\n/g, '') 
+        .replace(/([^"\\])"([^"\\])/g, '$1\\"$2'); 
+
+      try {
+        // Tenta analisar novamente a string saneada
+        parsedResult = JSON.parse(sanitizedText);
+        console.log('JSON successfully sanitized and parsed.');
+
+      } catch (finalError) {
+        // Falha total: Lança o erro para o bloco catch externo
+        console.error('Final JSON parsing failed even after sanitization.', finalError);
+        throw new Error(`Failed to parse final JSON. Response fragment: ${jsonText.substring(0, 100)}...`); 
+      }
+    }
 
     return {
       soilType: parsedResult.soilType,
@@ -99,7 +129,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
   } catch (error) {
     console.error('Error analyzing image with Gemini:', error);
 
-    // Mantendo o fallback robusto
+    // Retorna um resultado de fallback em caso de falha crítica
     return {
       soilType: 'Solo não identificado',
       characteristics: ['Erro na análise visual', 'Verifique a qualidade da foto'],
@@ -108,6 +138,8 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
   }
 }
 
+// ----------------------------------------------------------------------------------
+// ## Função 2: askAboutSoil (Chat com base na Análise)
 // ----------------------------------------------------------------------------------
 
 export async function askAboutSoil(
@@ -133,9 +165,9 @@ ${conversationHistory ? `HISTÓRICO DA CONVERSA:\n${conversationHistory}\n\n` : 
 
 Responda de forma clara, objetiva e prática. Use linguagem simples, adequada para agricultores. Baseie sua resposta nas informações da análise fornecidas acima. Se a pergunta for sobre algo não relacionado ao solo ou agricultura, redirecione educadamente para o tema da análise.`;
 
-    // 5. Chamada de API usando o SDK para o chat (AGORA USANDO gemini-2.5-flash)
+    // Chamada de API usando o SDK para o chat
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // <--- CORRIGIDO para um modelo estável e com cotas
+      model: 'gemini-2.5-flash', // Modelo Estável
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         temperature: 0.8,
@@ -156,5 +188,3 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
     throw error;
   }
 }
-
-///----------------------------------------------------------------------------------
