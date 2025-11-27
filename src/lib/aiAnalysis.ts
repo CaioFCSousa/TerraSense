@@ -9,73 +9,47 @@ interface ChatMessage {
   content: string;
 }
 
-// ⚠️ ATENÇÃO: Nunca exponha chaves de API diretamente em código frontend. 
-// Use variáveis de ambiente ou um proxy seguro.
-const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8"; // Exemplo, use sua chave
+// ====== NOVO: trava anti-spam ======
+let isProcessingImage = false;
+let isProcessingChat = false;
+
+const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
-const MAX_RETRIES = 5;
 
-// -----------------------------------------------------------------
-// FUNÇÕES DE UTILIDADE PARA TRATAMENTO DE ERROS (RATE LIMIT)
-// -----------------------------------------------------------------
+// ====== Função auxiliar com retry leve ======
+async function fetchWithRetry(url: string, options: any, retries = 3): Promise<Response> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await fetch(url, options);
 
-/**
- * Pausa a execução por um número especificado de milissegundos.
- */
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    if (response.status !== 429) return response;
+
+    console.warn(`[Gemini] 429 - Tentativa ${attempt}/${retries}`);
+
+    // espera progressiva
+    await new Promise(res => setTimeout(res, 800 * attempt));
+  }
+
+  throw new Error("Falha após múltiplas tentativas (429 Too Many Requests)");
 }
 
-/**
- * Tenta fazer uma chamada fetch, repetindo com Backoff Exponencial e Jitter se for um erro 429.
- * @param url A URL da API.
- * @param options As opções do fetch (method, headers, body).
- * @param maxRetries O número máximo de vezes que a tentativa será repetida.
- * @returns A Response do fetch.
- */
-async function retryFetch(
-    url: string,
-    options: RequestInit,
-    maxRetries: number = MAX_RETRIES
-): Promise<Response> {
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            const response = await fetch(url, options);
-
-            if (response.status === 429) {
-                // Erro 429: Too Many Requests. Tentar novamente.
-                const baseDelay = Math.pow(2, i); // Backoff Exponencial (1s, 2s, 4s, ...)
-                const jitter = Math.random() * 1000; // Jitter (Aleatoriedade 0-1000ms)
-                const delayMs = (baseDelay * 1000) + jitter;
-
-                console.warn(`[API] Tentativa ${i + 1} de ${maxRetries} falhou com 429. Esperando ${delayMs.toFixed(0)}ms...`);
-                await sleep(delayMs);
-                continue; // Pula para a próxima iteração para tentar novamente
-            }
-
-            // Para 200 (OK) e outros erros HTTP que não são 429, retorna a resposta
-            return response;
-        } catch (error) {
-            // Erros de rede (ex: falha de conexão).
-            console.error(`[API] Erro de rede na tentativa ${i + 1}:`, error);
-            if (i < maxRetries - 1) {
-                await sleep(2000); // Espera fixa para erros de rede
-                continue;
-            }
-            throw error; // Lança o erro se for a última tentativa
-        }
-    }
-    throw new Error(`Excedeu o limite de ${maxRetries} tentativas para a chamada de API.`);
-}
-
-// -----------------------------------------------------------------
-// FUNÇÕES PRINCIPAIS DE ANÁLISE E CHAT
-// -----------------------------------------------------------------
-
+// =====================================================
+// ============= ANALISAR IMAGEM (CORRIGIDO) ===========
+// =====================================================
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
+  if (isProcessingImage) {
+    console.warn("Aguarde: análise já em andamento.");
+    return {
+      soilType: "Aguardando requisição anterior",
+      characteristics: ["Espere alguns segundos"],
+      recommendations: ["Evite enviar várias imagens ao mesmo tempo"]
+    };
+  }
+
+  isProcessingImage = true;
+
   try {
-    const base64Data = imageBase64.includes(',')
-      ? imageBase64.split(',')[1]
+    const base64Data = imageBase64.includes(",")
+      ? imageBase64.split(",")[1]
       : imageBase64;
 
     const requestBody = {
@@ -86,17 +60,14 @@ export async function analyzeImageWithGemini(imageBase64: string): Promise<Analy
               text: `Você é um especialista em análise de solo para agricultura familiar. Analise esta imagem de solo e forneça:
 
 1. TIPO DE SOLO: Identifique o tipo principal (Argiloso, Arenoso, Humoso ou Siltoso)
-2. CARACTERÍSTICAS: Liste 4-5 características visuais identificáveis (cor, textura, composição aparente, umidade)
-3. RECOMENDAÇÕES: Forneça 4-6 recomendações práticas e específicas para plantio, incluindo culturas adequadas e cuidados
+2. CARACTERÍSTICAS: Liste 4-5 características visuais identificáveis
+3. RECOMENDAÇÕES: Forneça 4-6 recomendações práticas
 
-Use linguagem simples e direta, adequada para agricultores com pouco conhecimento técnico.
-Seja específico e prático nas recomendações.
-
-Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
+Retorne EXATAMENTE neste formato JSON:
 {
-  "soilType": "tipo do solo aqui",
-  "characteristics": ["característica 1", "característica 2", "característica 3", "característica 4"],
-  "recommendations": ["recomendação 1", "recomendação 2", "recomendação 3", "recomendação 4", "recomendação 5"]
+  "soilType": "tipo",
+  "characteristics": ["c1","c2","c3","c4"],
+  "recommendations": ["r1","r2","r3","r4"]
 }`
             },
             {
@@ -114,66 +85,57 @@ Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
       }
     };
 
-    // 🔄 Usa retryFetch para lidar com 429 e erros de rede
-    const response = await retryFetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+    const response = await fetchWithRetry(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
-        // Se cair aqui, é um erro HTTP diferente de 429, após as tentativas
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
 
     const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textContent) throw new Error("Resposta vazia da API Gemini");
 
-    if (!textContent) {
-      throw new Error('No response from Gemini API');
-    }
-
-    // Lógica para limpar e garantir que o JSON é parseado
-    const cleanedText = textContent
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
-
-    const parsedResult = JSON.parse(cleanedText);
+    const cleaned = textContent.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
 
     return {
-      soilType: parsedResult.soilType || 'Solo não identificado',
-      characteristics: Array.isArray(parsedResult.characteristics)
-        ? parsedResult.characteristics
-        : ['Características não identificadas'],
-      recommendations: Array.isArray(parsedResult.recommendations)
-        ? parsedResult.recommendations
-        : ['Recomendações não disponíveis']
+      soilType: parsed.soilType ?? "Não identificado",
+      characteristics: Array.isArray(parsed.characteristics)
+        ? parsed.characteristics
+        : ["Não identificado"],
+      recommendations: Array.isArray(parsed.recommendations)
+        ? parsed.recommendations
+        : ["Não identificado"]
     };
 
   } catch (error) {
-    console.error('Error analyzing image with Gemini:', error);
+    console.error("Error analyzing image with Gemini:", error);
 
-    // Retorno de erro amigável para o usuário
     return {
-      soilType: 'Erro na análise',
+      soilType: "Erro na análise",
       characteristics: [
-        'Não foi possível analisar a imagem',
-        'Verifique se a foto está nítida',
-        'Tente novamente com melhor iluminação'
+        "Imagem ruim",
+        "Tente melhorar a nitidez"
       ],
       recommendations: [
-        'Tire uma nova foto com boa iluminação',
-        'Certifique-se de que o solo está visível',
-        'Evite sombras e reflexos na imagem'
+        "Tire outra foto",
+        "Evite sombra",
+        "Centralize o solo"
       ]
     };
+  } finally {
+    isProcessingImage = false;
   }
 }
 
+// =====================================================
+// ================== CHAT SOBRE O SOLO =================
+// =====================================================
 export async function askAboutSoil(
   question: string,
   soilType: string,
@@ -181,30 +143,35 @@ export async function askAboutSoil(
   recommendations: string[],
   chatHistory: ChatMessage[]
 ): Promise<string> {
+
+  if (isProcessingChat) {
+    console.warn("Chat ainda processando, espere...");
+    return "Calma! Estou terminando a resposta anterior 😅";
+  }
+
+  isProcessingChat = true;
+
   try {
-    const conversationHistory = chatHistory
-      .map(msg => `${msg.role === 'user' ? 'Usuário' : 'Assistente'}: ${msg.content}`)
-      .join('\n\n');
+    const historyText = chatHistory
+      .map(msg => `${msg.role === "user" ? "Usuário" : "Assistente"}: ${msg.content}`)
+      .join("\n\n");
 
-    const prompt = `Você é um especialista em análise de solo e agricultura familiar. Você está conversando com um agricultor sobre uma análise de solo específica.
+    const prompt = `
+INFORMAÇÕES DO SOLO:
+- Tipo: ${soilType}
+- Características: ${characteristics.join(", ")}
+- Recomendações: ${recommendations.join(", ")}
 
-INFORMAÇÕES DA ANÁLISE:
-- Tipo de Solo: ${soilType}
-- Características: ${characteristics.join('; ')}
-- Recomendações: ${recommendations.join('; ')}
+${historyText ? `HISTÓRICO:\n${historyText}\n\n` : ""}
+Pergunta: ${question}
 
-${conversationHistory ? `HISTÓRICO DA CONVERSA:\n${conversationHistory}\n\n` : ''}PERGUNTA DO USUÁRIO: ${question}
-
-Responda de forma clara, objetiva e prática. Use linguagem simples, adequada para agricultores. Baseie sua resposta nas informações da análise fornecidas acima. Se a pergunta for sobre algo não relacionado ao solo ou agricultura, redirecione educadamente para o tema da análise.`;
+Responda de forma simples e prática, como se estivesse falando com um agricultor.
+`;
 
     const requestBody = {
       contents: [
         {
-          parts: [
-            {
-              text: prompt
-            }
-          ]
+          parts: [{ text: prompt }]
         }
       ],
       generationConfig: {
@@ -213,31 +180,27 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
       }
     };
 
-    // 🔄 Usa retryFetch para lidar com 429 e erros de rede
-    const response = await retryFetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+    const response = await fetchWithRetry(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
     const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!textContent) {
-      throw new Error('No response from Gemini API');
-    }
+    if (!textContent) throw new Error("Resposta vazia da API Gemini");
 
     return textContent.trim();
 
   } catch (error) {
-    console.error('Error asking about soil:', error);
-    // Em vez de lançar o erro bruto, você pode retornar uma mensagem amigável:
-    return 'Desculpe, houve um erro de comunicação e não consegui responder. Por favor, tente novamente.';
+    console.error("Error asking about soil:", error);
+    return "Ocorreu um erro ao responder. Tente novamente.";
+  } finally {
+    isProcessingChat = false;
   }
 }
