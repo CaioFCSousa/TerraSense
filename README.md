@@ -1,121 +1,122 @@
 # TerraSense
 
-## 🌱 Sistema Inteligente de Análise de Solo
+> Aplicação web para análise visual de solo com armazenamento em Supabase.
 
-Um sistema completo de análise de solo por imagem utilizando inteligência artificial, que fornece informações detalhadas sobre características físicas e químicas do solo.
+Descrição curta: Este projeto permite que usuários carreguem fotos de solo, obtenham uma análise (tipo de solo, características visuais e recomendações) usando um modelo de linguagem generativo e armazene os resultados no Supabase.
 
-## ✨ Funcionalidades
+**Tecnologias principais**
+- Frontend: `React` + `TypeScript` + `Vite`
+- Banco/Back-end: `Supabase` (migrations em `supabase/migrations`)
+- Integração de IA: chamada ao serviço generativo (ex.: Gemini) a partir de `src/lib/aiAnalysis.ts`
 
-### 🔍 Análise Completa do Solo
-- **Classificação de Tipo**: Identifica 9 tipos diferentes de solo
-- **Análise de Textura**: Determina se o solo é arenoso, argiloso ou siltoso
-- **Avaliação de Umidade**: Analisa níveis de umidade (seco, úmido, encharcado)
-- **Fertilidade**: Estima o potencial de fertilidade do solo
-- **Matéria Orgânica**: Avalia o conteúdo de matéria orgânica
-- **Cor Dominante**: Identifica a cor predominante do solo
+**Aviso de segurança**: Evite deixar chaves de API públicas no frontend. No repositório atual existe código que chama a API de geração diretamente; o recomendado é mover essa chamada para um backend seguro e manter a chave (ex.: `GOOGLE_API_KEY`) em variáveis de ambiente no servidor.
 
-### 🎯 Recomendações Inteligentes
-- Sugestões personalizadas baseadas nas características do solo
-- Orientações para cultivo e manejo
-- Recomendações de irrigação e fertilização
+**Sumário**
+- **Projeto**
+- **Pré-requisitos**
+- **Configuração (local)**
+- **Variáveis de ambiente**
+- **Executar**
+- **Migrations Supabase**
+- **Scripts úteis**
+- **Boas práticas**
 
-## 🛠️ Tecnologias Utilizadas
+**Projeto**
 
-### Backend
-- **Python Flask**: API REST
-- **TensorFlow/Keras**: Machine Learning com MobileNetV2
-- **OpenCV**: Processamento de imagem
-- **Scikit-learn**: Análise de dados
-- **NumPy/PIL**: Manipulação de imagens
+TerraSense é uma aplicação para apoiar agricultura familiar com análises práticas do solo a partir de imagens. A UI está em `src/` e a lógica de análise (cliente) está em `src/lib/aiAnalysis.ts`.
 
-### Frontend
-- **React 18**: Interface moderna
-- **TypeScript**: Tipagem estática
-- **Tailwind CSS**: Estilização responsiva
-- **Vite**: Build e desenvolvimento
+**Pré-requisitos**
+- Node.js (recomendado >= 18)
+- npm
+- (Opcional) CLI do Supabase, se for aplicar migrations localmente: `npm i -g supabase` ou usar `npx supabase`
 
-### Machine Learning
-- **MobileNetV2**: Modelo base pré-treinado
-- **Transfer Learning**: Fine-tuning para solos
-- **Data Augmentation**: Melhoria da generalização
-- **Class Weights**: Balanceamento de classes
+**Configuração (local)**
+1. Instale dependências:
 
-## 📊 Dataset
-
-O sistema foi treinado com mais de **5.000 imagens** de diferentes tipos de solo:
-
-- **Alluvial soil**: 693 imagens
-- **Black Soil**: 1.290 imagens  
-- **Red soil**: 1.232 imagens
-- **Yellow Soil**: 1.401 imagens
-- **Red soil**: 1.232 imagens
-- **Arid Soil**: 254 imagens
-- **Laterite Soil**: 225 imagens
-- **Mountain Soil**: 201 imagens
-- **Clay Soil**: 65 imagens
-- **Cinder Soil**: 30 imagens
-- **Peat Soil**: 30 imagens
-
-## 🚀 Como Executar
-
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-python app.py
+```powershell
+npm install
 ```
 
-### Frontend
-```bash
-cd project
-npm install
+2. Crie arquivo de variáveis de ambiente para o frontend na raiz do projeto:
+
+Exemplo de `.env.local`:
+
+```dotenv
+VITE_SUPABASE_URL="https://<your-project>.supabase.co"
+VITE_SUPABASE_ANON_KEY="<your-anon-key>"
+```
+
+3. (Opcional, recomendado) Mover a chamada à API generativa para um backend seguro. Se fizer isso, crie um arquivo de ambiente para o servidor, por exemplo `.env.server` com:
+
+```dotenv
+GOOGLE_API_KEY="<sua-google-api-key-ou-outra-chave-de-modelo>"
+```
+
+Nunca commit chaves em repositórios públicos.
+
+**Variáveis de ambiente explicadas**
+- `VITE_SUPABASE_URL`: URL do projeto Supabase (fornecida pelo painel Supabase).
+- `VITE_SUPABASE_ANON_KEY`: chave anônima para operações permitidas pelo cliente (frontend).
+- `GOOGLE_API_KEY` (se usar backend): chave para chamar APIs generativas do Google (ou similar). Mantenha só no servidor.
+
+**Executar (desenvolvimento)**
+
+Inicie o servidor de desenvolvimento Vite:
+
+```powershell
 npm run dev
 ```
 
-## 📱 Como Usar
+Se o PowerShell bloquear execução de scripts (erro `npm.ps1 cannot be loaded`), o atalho simples é abrir um `cmd` e executar:
 
-1. **Acesse a aplicação** no navegador
-2. **Tire uma foto** do solo em boa iluminação
-3. **Faça upload** da imagem
-4. **Receba a análise completa** com:
-   - Tipo de solo identificado
-   - Características físicas (textura, umidade)
-   - Características químicas (fertilidade, matéria orgânica)
-   - Recomendações personalizadas
+```powershell
+cmd /c npm run dev
+```
 
-## 🔬 Algoritmos de Análise
+Ou ajustar a política de execução (executar como administrador):
 
-### Análise de Textura
-- **Laplacian Variance**: Detecta bordas e texturas
-- **Sobel Gradient**: Analisa gradientes de intensidade
-- **Classificação**: Arenoso, argiloso ou siltoso
+```powershell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
 
-### Análise de Umidade
-- **HSV Color Space**: Análise de saturação e brilho
-- **Threshold Analysis**: Classificação por níveis de umidade
+**Build e preview**
 
-### Análise de Fertilidade
-- **K-means Clustering**: Identificação de cores dominantes
-- **Brightness Analysis**: Solos escuros = mais férteis
-- **Color-based Classification**: Alto, médio ou baixo
+```powershell
+npm run build
+npm run preview
+```
 
-## 🎯 Casos de Uso
+**Migrations Supabase**
 
-- **Agricultores**: Análise rápida de solo para decisões de cultivo
-- **Pesquisadores**: Classificação inicial de tipos de solo
-- **Estudantes**: Aprendizado sobre características do solo
-- **Consultores**: Ferramenta de apoio para recomendações
+As migrations estão em `supabase/migrations/`. Para aplicar migrations em um banco Supabase local/novo, use o Supabase CLI:
 
-## 🔮 Próximas Melhorias
+```bash
+npx supabase db push
+# ou, se tiver o CLI instalado globalmente
+supabase db push
+```
 
-- [ ] Histórico de análises
-- [ ] Integração com APIs meteorológicas
-- [ ] Análise de pH por imagem
-- [ ] Recomendações de cultivos específicos
-- [ ] Versão mobile nativa
-- [ ] Análise de nutrientes específicos
+Consulte a documentação do Supabase para deploy remoto e uso do CLI.
 
-## 📄 Licença
+**Scripts úteis**
+- `npm run dev` : inicia Vite (desenvolvimento)
+- `npm run build`: constrói a aplicação
+- `npm run preview`: serve o build localmente
+- `npm run lint`: roda o ESLint
+- `npm run typecheck`: checa tipos com `tsc`
 
-Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
+**Boas práticas / Notas de implementação**
+- Não coloque chaves secretas no frontend. Coloque-as em um backend e exponha apenas endpoints públicos controlados.
+- `src/lib/aiAnalysis.ts` atualmente contém a lógica de chamada ao modelo generativo — considerar mover para um endpoint no servidor para proteger a chave.
+- Supabase: políticas RLS (Row Level Security) e policies estão presentes nas migrations; reveja regras de insert/select para garantir comportamento desejado.
 
+**Créditos de Componentes**
+- **Caio**: implementou os componentes `Avatar.tsx`, `Badge.tsx`, `Button.tsx`, `Card.tsx` e `Input.tsx`.
+- **William**: implementou os componentes `ChatInterface.tsx`, `Modal.tsx`, `Navigation.tsx`, `SearchBar.tsx` e `Tooltip.tsx`.
+
+**Contribuindo**
+- Abra uma issue para discutir mudanças grandes.
+- Faça branch por feature com naming `feat/<nome>` ou `fix/<nome>`.
+
+**Licença**
+- Consulte `LICENSE` no repositório.
