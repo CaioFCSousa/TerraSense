@@ -5,7 +5,7 @@ export default function AboutPage() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
       <div className="text-center mb-12 sm:mb-16">
         <h1 className="text-3xl sm:text-4xl font-bold text-green-900 mb-4">
-          Sobre o TerraSense
+          Sobre o TerraSense --
         </h1>
         <p className="text-lg sm:text-xl text-stone-600 max-w-3xl mx-auto leading-relaxed">
           Tecnologia simples para quem cuida da terra
