@@ -11,7 +11,7 @@ interface ChatMessage {
 
 // ⚠️ ATENÇÃO: Nunca exponha chaves de API diretamente em código frontend. 
 // Use variáveis de ambiente ou um proxy seguro.
-const API_KEY = "AIzaSyBbRXWHFap0_DkCjYzwKs5GuyrYRMz0qgU"; // Exemplo, use sua chave
+const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8"; // Exemplo, use sua chave
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
 const MAX_RETRIES = 5;
 
