@@ -9,10 +9,68 @@ interface ChatMessage {
   content: string;
 }
 
-const API_KEY = "AIzaSyCMF7NE7gsxx1E0OiGXJXbtkAp89LxOnIA";
+// ⚠️ ATENÇÃO: Nunca exponha chaves de API diretamente em código frontend. 
+// Use variáveis de ambiente ou um proxy seguro.
+const API_KEY = "AIzaSyBbRXWHFap0_DkCjYzwKs5GuyrYRMz0qgU"; // Exemplo, use sua chave
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
+const MAX_RETRIES = 5;
 
-console.log(API_KEY);
+// -----------------------------------------------------------------
+// FUNÇÕES DE UTILIDADE PARA TRATAMENTO DE ERROS (RATE LIMIT)
+// -----------------------------------------------------------------
+
+/**
+ * Pausa a execução por um número especificado de milissegundos.
+ */
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Tenta fazer uma chamada fetch, repetindo com Backoff Exponencial e Jitter se for um erro 429.
+ * @param url A URL da API.
+ * @param options As opções do fetch (method, headers, body).
+ * @param maxRetries O número máximo de vezes que a tentativa será repetida.
+ * @returns A Response do fetch.
+ */
+async function retryFetch(
+    url: string,
+    options: RequestInit,
+    maxRetries: number = MAX_RETRIES
+): Promise<Response> {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await fetch(url, options);
+
+            if (response.status === 429) {
+                // Erro 429: Too Many Requests. Tentar novamente.
+                const baseDelay = Math.pow(2, i); // Backoff Exponencial (1s, 2s, 4s, ...)
+                const jitter = Math.random() * 1000; // Jitter (Aleatoriedade 0-1000ms)
+                const delayMs = (baseDelay * 1000) + jitter;
+
+                console.warn(`[API] Tentativa ${i + 1} de ${maxRetries} falhou com 429. Esperando ${delayMs.toFixed(0)}ms...`);
+                await sleep(delayMs);
+                continue; // Pula para a próxima iteração para tentar novamente
+            }
+
+            // Para 200 (OK) e outros erros HTTP que não são 429, retorna a resposta
+            return response;
+        } catch (error) {
+            // Erros de rede (ex: falha de conexão).
+            console.error(`[API] Erro de rede na tentativa ${i + 1}:`, error);
+            if (i < maxRetries - 1) {
+                await sleep(2000); // Espera fixa para erros de rede
+                continue;
+            }
+            throw error; // Lança o erro se for a última tentativa
+        }
+    }
+    throw new Error(`Excedeu o limite de ${maxRetries} tentativas para a chamada de API.`);
+}
+
+// -----------------------------------------------------------------
+// FUNÇÕES PRINCIPAIS DE ANÁLISE E CHAT
+// -----------------------------------------------------------------
 
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
   try {
@@ -56,7 +114,8 @@ Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
       }
     };
 
-    const response = await fetch(API_URL, {
+    // 🔄 Usa retryFetch para lidar com 429 e erros de rede
+    const response = await retryFetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -65,7 +124,8 @@ Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+        // Se cair aqui, é um erro HTTP diferente de 429, após as tentativas
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
@@ -76,6 +136,7 @@ Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
       throw new Error('No response from Gemini API');
     }
 
+    // Lógica para limpar e garantir que o JSON é parseado
     const cleanedText = textContent
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
@@ -96,6 +157,7 @@ Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
   } catch (error) {
     console.error('Error analyzing image with Gemini:', error);
 
+    // Retorno de erro amigável para o usuário
     return {
       soilType: 'Erro na análise',
       characteristics: [
@@ -151,7 +213,8 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
       }
     };
 
-    const response = await fetch(API_URL, {
+    // 🔄 Usa retryFetch para lidar com 429 e erros de rede
+    const response = await retryFetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -160,7 +223,7 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
@@ -174,6 +237,7 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
 
   } catch (error) {
     console.error('Error asking about soil:', error);
-    throw error;
+    // Em vez de lançar o erro bruto, você pode retornar uma mensagem amigável:
+    return 'Desculpe, houve um erro de comunicação e não consegui responder. Por favor, tente novamente.';
   }
 }
