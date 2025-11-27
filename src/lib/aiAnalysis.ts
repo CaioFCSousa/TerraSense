@@ -9,7 +9,7 @@ interface ChatMessage {
   content: string;
 }
 
-const API_KEY = "AIzaSyD-JLhuIwoEaDI6S0AU8_ECJ6chwD_1N8c";
+const API_KEY = "AIzaSyBbRXWHFap0_DkCjYzwKs5GuyrYRMz0qgU";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
 
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
