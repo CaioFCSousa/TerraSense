@@ -5,6 +5,10 @@ import { GoogleGenAI, Type } from '@google/genai';
 // e NUNCA deve ser exposta no código de frontend (navegador).
 const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8"; 
 
+// Constantes para o Retry da função de chat
+const MAX_RETRIES = 3;
+const DELAY_MS = 1000; // 1 segundo
+
 // 1. Inicializa o SDK do Google GenAI
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
@@ -44,6 +48,7 @@ const analysisSchema = {
 
 // =========================================================================
 // ## Função 1: analyzeImageWithGemini (Análise de Imagem)
+// Garante JSON estruturado e trata erros de parsing e "undefined".
 // =========================================================================
 
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
@@ -61,9 +66,9 @@ export async function analyzeImageWithGemini(imageBase64: string): Promise<Analy
 Use linguagem simples e direta, adequada para agricultores com pouco conhecimento técnico.
 Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 
-    // Chamada de API usando o SDK com resposta estruturada
+    // Chamada de API usando o modelo estável
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // Modelo Estável e Multimodal
+      model: 'gemini-2.5-flash', 
       contents: [
         {
           parts: [
@@ -85,7 +90,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
       }
     });
 
-    let jsonText = response.text; // Captura a string de resposta
+    let jsonText = response.text; 
     let parsedResult: AnalysisResult;
 
     // 🛑 VERIFICAÇÃO DE RESPOSTA VAZIA/UNDEFINED
@@ -107,7 +112,6 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
       
       // 1. Tenta corrigir JSON truncado no final (e.g., "restos de)
       if (!correctedText.endsWith('}')) {
-          // Trunca qualquer string incompleta no final e adiciona aspas, colchete, chave
           correctedText = correctedText.replace(/[^"]+$/, ''); 
           if (!correctedText.endsWith('"')) correctedText += '"';
           if (!correctedText.endsWith(']')) correctedText += ']';
@@ -150,7 +154,8 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 }
 
 // ----------------------------------------------------------------------------------
-// ## Função 2: askAboutSoil (Chat com base na Análise)
+// ## Função 2: askAboutSoil (Chat com Retry Logic)
+// Trata o erro de "No response from Gemini API" com tentativas.
 // ----------------------------------------------------------------------------------
 
 export async function askAboutSoil(
@@ -172,30 +177,53 @@ INFORMAÇÕES DA ANÁLISE:
 - Características: ${characteristics.join('; ')}
 - Recomendações: ${recommendations.join('; ')}
 
-${conversationHistory ? `HISTÓRICO DA CONVERSA:\n${conversationHistory}\n\n` : ''}PERGUNTA DO USUÁRIO: ${question}
+${conversationHistory ? `HISTÓRICA DA CONVERSA:\n${conversationHistory}\n\n` : ''}PERGUNTA DO USUÁRIO: ${question}
 
 Responda de forma clara, objetiva e prática. Use linguagem simples, adequada para agricultores. Baseie sua resposta nas informações da análise fornecidas acima. Se a pergunta for sobre algo não relacionado ao solo ou agricultura, redirecione educadamente para o tema da análise.`;
 
-    // Chamada de API usando o SDK para o chat
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // Modelo Estável
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0.8,
-        maxOutputTokens: 512,
-      }
-    });
+    // Implementação da lógica de Retry
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash', 
+                contents: [{ parts: [{ text: prompt }] }],
+                config: {
+                    temperature: 0.8,
+                    maxOutputTokens: 512,
+                }
+            });
 
-    const textContent = response.text;
+            const textContent = response.text;
 
-    if (!textContent) {
-      throw new Error('No response from Gemini API');
-    }
+            // Se a resposta tiver conteúdo, retorna e sai do loop
+            if (textContent && textContent.trim().length > 0) {
+                return textContent.trim();
+            }
 
-    return textContent.trim();
+            // Se a resposta estiver vazia, espera para tentar novamente
+            console.warn(`Attempt ${attempt + 1} failed: No content received. Retrying in ${DELAY_MS / 1000}s...`);
+            
+            if (attempt < MAX_RETRIES - 1) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+            }
+            
+        } catch (error) {
+            // Captura erros de rede/API. Se não for a última tentativa, tenta novamente
+            console.error(`Attempt ${attempt + 1} failed with API error.`, error);
+            if (attempt < MAX_RETRIES - 1) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+                continue; // Continua para a próxima tentativa
+            }
+            throw error; // Lança o erro se for a última tentativa
+        }
+    }
+
+    // Se o loop terminar sem sucesso, lança um erro final
+    throw new Error(`No response from Gemini API after ${MAX_RETRIES} attempts.`);
 
   } catch (error) {
     console.error('Error asking about soil:', error);
-    throw error;
+    // Em caso de falha, relança o erro, que pode ser tratado no frontend
+    throw error; 
   }
 }
