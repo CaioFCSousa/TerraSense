@@ -63,7 +63,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 
     // Chamada de API usando o SDK com resposta estruturada
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // Modelo Estável
+      model: 'gemini-2.5-flash', // Modelo Estável e Multimodal
       contents: [
         {
           parts: [
@@ -88,7 +88,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
     let jsonText = response.text; // Captura a string de resposta
     let parsedResult: AnalysisResult;
 
-    // 🛑 VERIFICAÇÃO CRÍTICA: Trata o erro de "undefined" ou resposta vazia
+    // 🛑 VERIFICAÇÃO DE RESPOSTA VAZIA/UNDEFINED
     if (!jsonText || jsonText.trim() === "undefined" || jsonText.trim().length === 0) {
       throw new Error('Gemini returned empty or invalid response text (likely "undefined").');
     }
@@ -100,13 +100,24 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
       parsedResult = JSON.parse(jsonText);
 
     } catch (parseError) {
-      // 5. Lógica de Saneamento de JSON: Tenta corrigir aspas/quebras de linha
+      // 5. Lógica de Saneamento de JSON (Para caracteres e truncamento)
       console.warn('JSON parsing failed. Attempting to sanitize response:', jsonText);
       
-      // Saneamento: remove quebras de linha e tenta escapar aspas duplas internas não escapadas
-      const sanitizedText = jsonText
+      let correctedText = jsonText;
+      
+      // 1. Tenta corrigir JSON truncado no final (e.g., "restos de)
+      if (!correctedText.endsWith('}')) {
+          // Trunca qualquer string incompleta no final e adiciona aspas, colchete, chave
+          correctedText = correctedText.replace(/[^"]+$/, ''); 
+          if (!correctedText.endsWith('"')) correctedText += '"';
+          if (!correctedText.endsWith(']')) correctedText += ']';
+          if (!correctedText.endsWith('}')) correctedText += '}';
+      }
+      
+      // 2. Saneamento: remove quebras de linha e tenta escapar aspas duplas internas não escapadas
+      const sanitizedText = correctedText
         .replace(/\\n/g, '') 
-        .replace(/([^"\\])"([^"\\])/g, '$1\\"$2'); 
+        .replace(/([^"\\])"([^"\\])/g, '$1\\"$2'); // Escapa aspas não escapadas
 
       try {
         // Tenta analisar novamente a string saneada
