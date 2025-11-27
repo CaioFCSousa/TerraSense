@@ -1,3 +1,15 @@
+import { GoogleGenAI, Type } from '@google/genai';
+
+// ⚠️ Mudei a forma como a chave é obtida.
+// É altamente recomendado carregar a chave de uma variável de ambiente (process.env.GEMINI_API_KEY)
+// e NUNCA deixá-la hardcoded ou exposta no frontend.
+// Para este exemplo, vou manter a chave, mas você deve removê-la em produção.
+const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8"; 
+
+// 1. Inicialize o SDK. Ele usa a variável de ambiente GEMINI_API_KEY ou a chave passada.
+const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+// Interfaces existentes
 export interface AnalysisResult {
   soilType: string;
   characteristics: string[];
@@ -9,8 +21,28 @@ interface ChatMessage {
   content: string;
 }
 
-const API_KEY = "AIzaSyBbRXWHFap0_DkCjYzwKs5GuyrYRMz0qgU";
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
+// 2. Definição do Schema JSON para garantir o formato da saída
+const analysisSchema = {
+  type: Type.OBJECT,
+  properties: {
+    soilType: {
+      type: Type.STRING,
+      description: "O tipo principal de solo identificado (Argiloso, Arenoso, Humoso, Siltoso)."
+    },
+    characteristics: {
+      type: Type.ARRAY,
+      description: "Lista de 4 a 5 características visuais e de composição do solo.",
+      items: { type: Type.STRING }
+    },
+    recommendations: {
+      type: Type.ARRAY,
+      description: "Lista de 4 a 6 recomendações práticas para plantio e manejo.",
+      items: { type: Type.STRING }
+    }
+  },
+  required: ["soilType", "characteristics", "recommendations"]
+};
+
 
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
   try {
@@ -18,102 +50,65 @@ export async function analyzeImageWithGemini(imageBase64: string): Promise<Analy
       ? imageBase64.split(',')[1]
       : imageBase64;
 
-    const requestBody = {
-      contents: [
-        {
-          parts: [
-            {
-              text: `Você é um especialista em análise de solo para agricultura familiar. Analise esta imagem de solo e forneça:
+    const promptText = `Você é um especialista em análise de solo para agricultura familiar. Analise esta imagem de solo e forneça:
 
 1. TIPO DE SOLO: Identifique o tipo principal (Argiloso, Arenoso, Humoso ou Siltoso)
 2. CARACTERÍSTICAS: Liste 4-5 características visuais identificáveis (cor, textura, composição aparente, umidade)
 3. RECOMENDAÇÕES: Forneça 4-6 recomendações práticas e específicas para plantio, incluindo culturas adequadas e cuidados
 
 Use linguagem simples e direta, adequada para agricultores com pouco conhecimento técnico.
-Seja específico e prático nas recomendações.
+Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 
-Retorne sua análise EXATAMENTE neste formato JSON (sem markdown, sem código):
-{
-  "soilType": "tipo do solo aqui",
-  "characteristics": ["característica 1", "característica 2", "característica 3", "característica 4"],
-  "recommendations": ["recomendação 1", "recomendação 2", "recomendação 3", "recomendação 4", "recomendação 5"]
-}`
-            },
+    // 3. Chamada de API usando o SDK com resposta estruturada
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: [
+        {
+          parts: [
+            { text: promptText },
             {
-              inline_data: {
-                mime_type: "image/jpeg",
+              inlineData: {
+                mimeType: "image/jpeg",
                 data: base64Data
               }
             }
           ]
         }
       ],
-      generationConfig: {
+      config: {
         temperature: 0.7,
         maxOutputTokens: 1024,
+        // Configurações chave para garantir o JSON
+        responseMimeType: "application/json",
+        responseSchema: analysisSchema
       }
-    };
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody)
     });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!textContent) {
-      throw new Error('No response from Gemini API');
-    }
-
-    const cleanedText = textContent
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
-
-    const parsedResult = JSON.parse(cleanedText);
+    // 4. A resposta estruturada está diretamente no 'response.text' como uma string JSON limpa
+    const jsonText = response.text;
+    
+    // O SDK garante o JSON, então não precisamos mais do 'cleanedText' e regex!
+    const parsedResult = JSON.parse(jsonText);
 
     return {
-      soilType: parsedResult.soilType || 'Solo não identificado',
-      characteristics: Array.isArray(parsedResult.characteristics)
-        ? parsedResult.characteristics
-        : ['Características não identificadas'],
-      recommendations: Array.isArray(parsedResult.recommendations)
-        ? parsedResult.recommendations
-        : ['Recomendações não disponíveis']
+      soilType: parsedResult.soilType,
+      characteristics: parsedResult.characteristics,
+      recommendations: parsedResult.recommendations
     };
 
   } catch (error) {
     console.error('Error analyzing image with Gemini:', error);
 
+    // Mantendo o fallback robusto
     return {
-      soilType: 'Humoso (Orgânico)',
-      characteristics: [
-        "Cor preta intensa, característica de alta concentração de húmus.",
-        "Textura visivelmente solta e porosa, indicando excelente aeração.",
-        "Parece reter umidade adequadamente, fundamental para o crescimento das plantas.",
-        "Rico em matéria orgânica decomposta, sugerindo alta fertilidade natural.",
-        "Ausência de grandes pedras ou cascalho."
-      ],
-      recommendations: [
-        "Culturas sugeridas: É ideal para hortaliças (alface, rúcula), frutas e legumes que exigem solo nutritivo.",
-      "Nutrição: Continue a adicionar composto orgânico ou húmus de minhoca para manter a alta fertilidade.",
-      "Irrigação: Monitore a umidade. Solos orgânicos retêm bem a água, mas precisam de drenagem para evitar encharcamento.",
-      "Manejo: Evite virar demais o solo para não acelerar a perda de matéria orgânica. Mantenha a técnica de plantio direto.",
-      "Correção: Não há necessidade de correção de pH aparente, mas realize um teste simples se notar problemas de crescimento.",
-      "Plantio: É excelente para semeadura direta devido à sua textura fofa e fácil de trabalhar."
-      ]
+      soilType: 'Solo não identificado',
+      characteristics: ['Erro na análise visual', 'Verifique a qualidade da foto'],
+      recommendations: ['Tente novamente com uma foto mais clara do solo', 'Realize um teste de solo manual (pegar um punhado e apertar)']
     };
   }
 }
+
+// ----------------------------------------------------------------------------------
 
 export async function askAboutSoil(
   question: string,
@@ -138,36 +133,17 @@ ${conversationHistory ? `HISTÓRICO DA CONVERSA:\n${conversationHistory}\n\n` : 
 
 Responda de forma clara, objetiva e prática. Use linguagem simples, adequada para agricultores. Baseie sua resposta nas informações da análise fornecidas acima. Se a pergunta for sobre algo não relacionado ao solo ou agricultura, redirecione educadamente para o tema da análise.`;
 
-    const requestBody = {
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt
-            }
-          ]
-        }
-      ],
-      generationConfig: {
+    // 5. Chamada de API usando o SDK para o chat (mantendo o mesmo modelo)
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
         temperature: 0.8,
         maxOutputTokens: 512,
       }
-    };
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody)
     });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textContent = response.text;
 
     if (!textContent) {
       throw new Error('No response from Gemini API');
