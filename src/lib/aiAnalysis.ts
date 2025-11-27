@@ -5,9 +5,9 @@ import { GoogleGenAI, Type } from '@google/genai';
 // e NUNCA deve ser exposta no código de frontend (navegador).
 const API_KEY = "AIzaSyDl4tpg-KzpHknS1EIp5rAEkzm47yzAOr8"; 
 
-// Constantes para o Retry da função de chat
+// Constantes para a lógica de Retry
 const MAX_RETRIES = 3;
-const DELAY_MS = 1000; // 1 segundo
+const DELAY_MS = 1000; // 1 segundo de espera entre as tentativas
 
 // 1. Inicializa o SDK do Google GenAI
 const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -46,9 +46,30 @@ const analysisSchema = {
   required: ["soilType", "characteristics", "recommendations"]
 };
 
+// --- Configurações de Segurança ---
+// Flexibiliza os filtros de segurança para evitar que perguntas inocentes sejam bloqueadas.
+const customSafetySettings = [
+    {
+        category: "HARM_CATEGORY_HARASSMENT",
+        threshold: "BLOCK_LOW_AND_ABOVE", // Bloqueia apenas níveis mais altos de assédio
+    },
+    {
+        category: "HARM_CATEGORY_HATE_SPEECH",
+        threshold: "BLOCK_LOW_AND_ABOVE",
+    },
+    {
+        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        threshold: "BLOCK_NONE", // Pode ser BLOCK_LOW_AND_ABOVE se quiser mais segurança
+    },
+    {
+        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+        threshold: "BLOCK_NONE",
+    },
+];
+
+
 // =========================================================================
 // ## Função 1: analyzeImageWithGemini (Análise de Imagem)
-// Garante JSON estruturado e trata erros de parsing e "undefined".
 // =========================================================================
 
 export async function analyzeImageWithGemini(imageBase64: string): Promise<AnalysisResult> {
@@ -86,7 +107,8 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
         temperature: 0.7,
         maxOutputTokens: 1024,
         responseMimeType: "application/json",
-        responseSchema: analysisSchema
+        responseSchema: analysisSchema,
+        safetySettings: customSafetySettings // Aplica as configurações de segurança
       }
     });
 
@@ -112,6 +134,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
       
       // 1. Tenta corrigir JSON truncado no final (e.g., "restos de)
       if (!correctedText.endsWith('}')) {
+          // Trunca a última string incompleta e adiciona os fechamentos
           correctedText = correctedText.replace(/[^"]+$/, ''); 
           if (!correctedText.endsWith('"')) correctedText += '"';
           if (!correctedText.endsWith(']')) correctedText += ']';
@@ -129,7 +152,7 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
         console.log('JSON successfully sanitized and parsed.');
 
       } catch (finalError) {
-        // Falha total: Lança o erro para o bloco catch externo
+        // Falha total
         console.error('Final JSON parsing failed even after sanitization.', finalError);
         throw new Error(`Failed to parse final JSON. Response fragment: ${jsonText.substring(0, 100)}...`); 
       }
@@ -155,7 +178,6 @@ Retorne sua análise EXATAMENTE no formato JSON definido no schema.`;
 
 // ----------------------------------------------------------------------------------
 // ## Função 2: askAboutSoil (Chat com Retry Logic)
-// Trata o erro de "No response from Gemini API" com tentativas.
 // ----------------------------------------------------------------------------------
 
 export async function askAboutSoil(
@@ -190,6 +212,7 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
                 config: {
                     temperature: 0.8,
                     maxOutputTokens: 512,
+                    safetySettings: customSafetySettings // Aplica as configurações de segurança
                 }
             });
 
@@ -223,7 +246,6 @@ Responda de forma clara, objetiva e prática. Use linguagem simples, adequada pa
 
   } catch (error) {
     console.error('Error asking about soil:', error);
-    // Em caso de falha, relança o erro, que pode ser tratado no frontend
     throw error; 
   }
 }
